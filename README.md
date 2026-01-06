@@ -3,12 +3,19 @@ Um scanner de portas leve e poderoso escrito em Python 3 utilizando a biblioteca
 MAC Address e técnicas de evasão de firewall.
 
 🚀 Funcionalidades Tipos de Scan:
+
 TCP SYN: Scan furtivo (padrão).
+
 TCP FIN: Técnica de bypass para firewalls.
+
 UDP Scan: Verificação de serviços UDP.
+
 Verifica se o alvo está online (ICMP) antes de escanear.
+
 MAC Detection: Identifica o endereço MAC e o fabricante (Vendor) se o alvo estiver na rede local (LAN).
+
 Auto-Elevação: O script detecta automaticamente a necessidade de privilégios e solicita a senha sudo apenas uma vez, sem necessidade de digitar sudo python3.
+
 Log Verboso: Saída detalhada estilo Nmap com timestamps e feedback em tempo real (-v).
 
 📋 Pré-requisitosEste script foi projetado para ambientes Linux/Unix.
