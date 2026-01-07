@@ -6,12 +6,15 @@ import time
 import ipaddress 
 import re 
 import os
+import random
 from datetime import datetime
 from scapy.all import *
 
+# Retira mensagens de erros da biblioteca Scapy
 logging.getLogger("scapy.runtime").setLevel(logging.ERROR)
 conf.verb = 0
 
+# Mensagem de Log quando o modo verbose está ativo
 def log(mensagem, nivel="INFO", verbose=False):
     if verbose:
         timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
@@ -25,20 +28,46 @@ def log(mensagem, nivel="INFO", verbose=False):
             
         print(f"{prefixo} {timestamp} | {mensagem}")
 
+# Função para gerar IPs aleatórios para utilização no Decoy Scan
+def gerar_ip_aleatorio():
+    primeiro_octeto = random.randint(1, 223)
+    while primeiro_octeto in [127, 10, 172, 192]: 
+         primeiro_octeto = random.randint(1, 223)
+    return f"{primeiro_octeto}.{random.randint(0,255)}.{random.randint(0,255)}.{random.randint(0,255)}"
+
+# Função para execução do Decoy Scan
+def processar_decoys(decoy_arg):
+    lista_decoys = []
+    if not decoy_arg:
+        return []
+
+    if decoy_arg.upper().startswith("RND:"):
+        try:
+            quantidade = int(decoy_arg.split(":")[1])
+            for _ in range(quantidade):
+                lista_decoys.append(gerar_ip_aleatorio())
+        except (IndexError, ValueError):
+            sys.exit("Erro: Formato RND inválido. Use RND:numero (ex: RND:5).")
+    else:
+        ips = decoy_arg.split(",")
+        for ip in ips:
+            ip = ip.strip()
+            try:
+                ipaddress.ip_address(ip)
+                lista_decoys.append(ip)
+            except ValueError:
+                sys.exit(f"Erro: O IP de Decoy '{ip}' é inválido.")
+    return lista_decoys
+
+# Função para resolver DNS da máquina alvo
 def validar_e_resolver_alvo(alvo, verbose=False):
     log(f"Iniciando resolução DNS para: {alvo}", "INFO", verbose)
-    
     try:
         ip_obj = ipaddress.ip_address(alvo)
         log(f"IP Alvo: {ip_obj}", "INFO", verbose)
         return str(ip_obj)
     except ValueError:
         pass
-
-    if alvo[0].isdigit() and alvo.count('.') == 3:
-        sys.exit(f"O endereço de IP '{alvo}' contém caracteres inválidos.")
-    if re.match(r"^\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}$", alvo):
-        sys.exit(f"O endereço de IP '{alvo}' contém números inválidos (maiores que 255).")
 
     regex_dominio = r"^(?!-)[A-Za-z0-9-]{1,63}(?<!-)(\.[A-Za-z0-9-]{1,63})+$"
     if alvo != "localhost" and not re.match(regex_dominio, alvo):
@@ -51,9 +80,9 @@ def validar_e_resolver_alvo(alvo, verbose=False):
     except socket.gaierror:
         sys.exit(f"Não foi possível encontrar o IP para '{alvo}', domínio inalcançável.")
 
+# Função para verificar o estado da máquina alvo
 def verificar_ligado(target_ip, verbose=False):
     log(f"Iniciando Host Discovery em {target_ip}", "INFO", verbose)
-    
     is_up = False
     motivo = "Sem resposta"
 
@@ -64,40 +93,31 @@ def verificar_ligado(target_ip, verbose=False):
         motivo = f"Resposta ICMP (Type {resp_icmp.getlayer(ICMP).type})"
 
     if is_up:
-        log(f"Host {target_ip} está ONLINE. Motivo: {motivo}", "SUCCESS", verbose)
-    if verbose:
+        log(f"Host {target_ip} está ONLINE.", "SUCCESS", verbose)
+        if verbose:
             try:
                 mac_addr = getmacbyip(target_ip)
                 if mac_addr:
                     vendor = "Desconhecido"
                     try:
-                        vendor_res = conf.manufdb._get_manuf(mac_addr)
-                        if vendor_res:
-                            vendor = vendor_res
-                    except:
-                        pass
-                    
+                        vendor = conf.manufdb._get_manuf(mac_addr)
+                    except: pass
                     log(f"MAC Address: {mac_addr} ({vendor})", "SUCCESS", verbose)
-                else:
-                    log("Erro ao tentar obter MAC: {e}", "DEBUG", verbose)
-            except Exception as e:
-                log(f"Erro ao tentar obter MAC: {e}", "DEBUG", verbose)    
+            except: pass
     else:
         log(f"Host {target_ip} está OFFLINE.", "ERROR", verbose)
-
     return is_up
-    
+
+# Função para evitar erro de digitação nas portas
 def validar_portas(ports_str):
     if not re.match(r"^[\d\-,]+$", ports_str):
         sys.exit(f"A porta '{ports_str}' contém caracteres inválidos.")
     try:
-        if ports_str == "-":
-            return range(1, 65536)
+        if ports_str == "-": return range(1, 65536)
         elif "-" in ports_str:
             partes = ports_str.split("-")
             start, end = int(partes[0]), int(partes[1])
-            if start > end or start < 1 or end > 65535:
-                sys.exit(f"Range de portas inválido.")
+            if start > end or start < 1 or end > 65535: sys.exit(f"Range inválido.")
             return range(start, end + 1)
         else:
             lista = [int(p) for p in ports_str.split(",")]
@@ -108,11 +128,10 @@ def validar_portas(ports_str):
         sys.exit("Erro ao processar portas.")
 
 def obter_servico(porta, proto="tcp"):
-    try:
-        return socket.getservbyport(porta, proto)
-    except:
-        return "Desconhecido"
+    try: return socket.getservbyport(porta, proto)
+    except: return "Desconhecido"
 
+# Funções de análise, aqui será feito a analise do pacote de resposta e indicar o estado da porta
 def analisar_syn(resp):
     if resp is None: return "FILTRADA"
     elif resp.haslayer(TCP):
@@ -126,6 +145,14 @@ def analisar_ack(resp):
         if resp.getlayer(TCP).flags == 0x04: return "NÃO FILTRADA"
     return "DESCONHECIDO"
 
+def analisar_fin(resp):
+    if resp is None: return "ABERTA|FILTRADA"
+    elif resp.haslayer(TCP):
+        if resp.getlayer(TCP).flags & 0x04: return "FECHADA"
+    elif resp.haslayer(ICMP):
+        if resp.getlayer(ICMP).type == 3: return "FILTRADA"
+    return "DESCONHECIDO"
+
 def analisar_udp(resp):
     if resp is None: return "ABERTA|FILTRADA"
     elif resp.haslayer(ICMP):
@@ -136,17 +163,6 @@ def analisar_udp(resp):
     elif resp.haslayer(UDP): return "ABERTA"
     return "DESCONHECIDO"
 
-def analisar_fin(resp):
-    if resp is None:
-        return "ABERTA|FILTRADA"
-    elif resp.haslayer(TCP):
-        if resp.getlayer(TCP).flags & 0x04:
-            return "FECHADA"
-    elif resp.haslayer(ICMP):
-        if resp.getlayer(ICMP).type == 3:
-            return "FILTRADA"
-    return "DESCONHECIDO"
-
 def analisar_xmas(resp):
     if resp is None: return "ABERTA|FILTRADA"
     elif resp.haslayer(TCP):
@@ -155,21 +171,46 @@ def analisar_xmas(resp):
         if resp.getlayer(ICMP).type == 3: return "FILTRADA"
     return "DESCONHECIDO"
 
-def executar_scan(target_ip, portas, tipo_scan, verbose):
+# Função principal onde o PortScan é executado
+def executar_scan(target_ip, portas, tipo_scan, decoys, verbose):
     start_time = time.time()
     proto_servico = "udp" if tipo_scan == "UDP" else "tcp"
     
+    try:
+        meu_ip_real = get_if_addr(conf.iface)
+    except:
+        meu_ip_real = "IP Desconhecido"
+
     log(f"Iniciando {tipo_scan} Scan em {target_ip}", "INFO", verbose)
+    
+    if decoys:
+        log(f"DECOY ATIVO. Utilizando os IPs:", "INFO", verbose)
+        for d in decoys:
+             log(f" -> {d}", "INFO", verbose)
+
     log(f"Escaneando {len(portas)} portas", "INFO", verbose)
 
     resultados = []
 
     for porta in portas:
-        log(f"Testando porta {porta}/{proto_servico}...", "DEBUG", verbose)
+        src_port = RandShort()
         
         try:
             servico = obter_servico(porta, proto_servico)
-            src_port = RandShort()
+            
+            if decoys:
+                for decoy_ip in decoys:
+                    log(f"IP Falso: {decoy_ip} enviando pacote para {target_ip}:{porta}", "DEBUG", verbose)
+                    
+                    if tipo_scan == "SYN":
+                        send(IP(src=decoy_ip, dst=target_ip)/TCP(sport=src_port, dport=porta, flags="S"), verbose=0)
+                    elif tipo_scan == "FIN":
+                        send(IP(src=decoy_ip, dst=target_ip)/TCP(sport=src_port, dport=porta, flags="F"), verbose=0)
+                    elif tipo_scan == "UDP":
+                        send(IP(src=decoy_ip, dst=target_ip)/UDP(sport=src_port, dport=porta), verbose=0)
+
+            log(f"IP Real: {meu_ip_real} enviando pacote para {target_ip}:{porta}", "DEBUG", verbose)
+            
             estado = "ERRO"
             resp = None
 
@@ -179,6 +220,7 @@ def executar_scan(target_ip, portas, tipo_scan, verbose):
                 estado = analisar_syn(resp)
                 if estado == "ABERTA":
                     send(IP(dst=target_ip)/TCP(sport=src_port, dport=porta, flags="R"), verbose=0)
+            
             elif tipo_scan == "FIN":
                 pkt = IP(dst=target_ip)/TCP(sport=src_port, dport=porta, flags="F")
                 resp = sr1(pkt, timeout=1, verbose=0)
@@ -220,15 +262,16 @@ def executar_scan(target_ip, portas, tipo_scan, verbose):
         print(f"{r[0]:<10} {r[1].upper():<10} {r[2]:<20} {r[3]}")
     print("-" * 85)
 
+# Main
 def main():
-    parser = argparse.ArgumentParser(description="PortScan Estilo Nmap")
+    parser = argparse.ArgumentParser(description="PortScan Estilo Nmap com Decoy")
     parser.add_argument("target", help="IP ou Hostname Alvo")
     parser.add_argument("-p", "--ports", help="Range de portas (ex: 20-100, 80, -)", required=True)
     parser.add_argument("-U", "--udp", action="store_true", help="Realizar UDP Scan")
     parser.add_argument("-t", "--type", choices=["S", "A", "X", "F"], default="S", 
                         help="Tipo TCP: S (SYN), A (ACK), X (XMAS), F (FIN). Padrão: S")
-    parser.add_argument("-v", "--verbose", action="store_true", help="Modo Verboso (Mostra progresso detalhado)")
-    parser.add_argument("-g", "--source-port", type=int, help="Porta de origem fixa")
+    parser.add_argument("-v", "--verbose", action="store_true", help="Modo Verboso")
+    parser.add_argument("-D", "--decoy", help="IPs falsos. Ex: '10.0.0.1,10.0.0.2' OU 'RND:5'")
 
     args = parser.parse_args()
 
@@ -244,6 +287,7 @@ def main():
     if args.verbose:
         print(f"Iniciando PortScan em {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
 
+    lista_decoys = processar_decoys(args.decoy)
     target_ip = validar_e_resolver_alvo(args.target, args.verbose)
 
     if not verificar_ligado(target_ip, args.verbose):
@@ -253,7 +297,8 @@ def main():
     if args.ports:
         portas = validar_portas(args.ports)
 
-    executar_scan(target_ip, portas, tipo_escolhido, args.verbose)
+    executar_scan(target_ip, portas, tipo_escolhido, lista_decoys, args.verbose)
 
+# Indicativo para o python saber onde deve começar
 if __name__ == "__main__":
     main()
