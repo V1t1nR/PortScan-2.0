@@ -209,7 +209,7 @@ def executar_scan(target_ip, portas, tipo_scan, decoys, verbose):
                     elif tipo_scan == "UDP":
                         send(IP(src=decoy_ip, dst=target_ip)/UDP(sport=src_port, dport=porta), verbose=0)
 
-            log(f"IP: {meu_ip_real} enviando pacote para {target_ip}:{porta}", "DEBUG", verbose)
+            log(f"IP Real: {meu_ip_real} enviando pacote para {target_ip}:{porta}", "DEBUG", verbose)
             
             estado = "ERRO"
             resp = None
@@ -300,7 +300,8 @@ def main():
         portas = validar_portas(args.ports)
     else:
         if args.verbose:
-            portas = range(1, 1025)
+            print("[*] Nenhuma porta definida. Escaneando as 1024 portas padrão...")
+        portas = range(1, 1025)
 
     executar_scan(target_ip, portas, tipo_escolhido, lista_decoys, args.verbose)
 
