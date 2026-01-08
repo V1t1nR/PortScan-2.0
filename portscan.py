@@ -209,7 +209,7 @@ def executar_scan(target_ip, portas, tipo_scan, decoys, verbose):
                     elif tipo_scan == "UDP":
                         send(IP(src=decoy_ip, dst=target_ip)/UDP(sport=src_port, dport=porta), verbose=0)
 
-            log(f"IP Real: {meu_ip_real} enviando pacote para {target_ip}:{porta}", "DEBUG", verbose)
+            log(f"IP: {meu_ip_real} enviando pacote para {target_ip}:{porta}", "DEBUG", verbose)
             
             estado = "ERRO"
             resp = None
@@ -266,7 +266,9 @@ def executar_scan(target_ip, portas, tipo_scan, decoys, verbose):
 def main():
     parser = argparse.ArgumentParser(description="PortScan Estilo Nmap com Decoy")
     parser.add_argument("target", help="IP ou Hostname Alvo")
-    parser.add_argument("-p", "--ports", help="Range de portas (ex: 20-100, 80, -)", required=True)
+    
+    parser.add_argument("-p", "--ports", help="Range de portas (Padrão: 1-1024)", required=False)
+    
     parser.add_argument("-U", "--udp", action="store_true", help="Realizar UDP Scan")
     parser.add_argument("-t", "--type", choices=["S", "A", "X", "F"], default="S", 
                         help="Tipo TCP: S (SYN), A (ACK), X (XMAS), F (FIN). Padrão: S")
@@ -296,6 +298,9 @@ def main():
 
     if args.ports:
         portas = validar_portas(args.ports)
+    else:
+        if args.verbose:
+            portas = range(1, 1025)
 
     executar_scan(target_ip, portas, tipo_escolhido, lista_decoys, args.verbose)
 
