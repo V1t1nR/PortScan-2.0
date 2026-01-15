@@ -12,14 +12,11 @@ from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime
 from scapy.all import *
 
-# Retira mensagens de erros da biblioteca Scapy
 logging.getLogger("scapy.runtime").setLevel(logging.ERROR)
 conf.verb = 0
 
-# Lock para evitar colisão no print
 print_lock = threading.Lock()
 
-# --- CONFIGURAÇÃO DE TIMING (T0 - T5) ---
 TIMING_CONFIG = {
     0: {"threads": 1,   "timeout": 2.0, "sleep": 5.0, "desc": "Furtivo"},
     1: {"threads": 1,   "timeout": 1.5, "sleep": 2.0, "desc": "Discreto"},
@@ -64,7 +61,7 @@ def verificar_ligado(target_ip, timeout_val, verbose=False):
     up = False
     motivo = "Sem resposta"
     
-    privado = ipaddress.ip_address(target_ip).is_private
+    ip_privado = ipaddress.ip_address(target_ip).is_private
     
     try:
         pacote_arp = Ether(dst="ff:ff:ff:ff:ff:ff")/ARP(pdst=target_ip)
@@ -72,23 +69,23 @@ def verificar_ligado(target_ip, timeout_val, verbose=False):
         resp_arp = srp1(pacote_arp, timeout=timeout_val, verbose=0, iface=conf.iface)
         
         if resp_arp:
-            is_up = True
+            up = True
             motivo = f"Resposta ARP (MAC: {resp_arp.hwsrc})"
     except Exception as e:
         if verbose: log(f"Falha no ARP: {e}", "DEBUG", verbose)
 
-    if privado and not is_up:
+    if ip_privado and not up:
         log(f"Host {target_ip} (LAN) não respondeu ARP. Considerando OFFLINE.", "ERROR", verbose)
         return False
 
-    if not up and not privado:
+    if not up and not ip_privado:
         if verbose: log("Tentando ICMP Echo Request...", "DEBUG", verbose)
         resp = sr1(IP(dst=target_ip)/ICMP(), timeout=timeout_val, verbose=0)
         if resp:
             up = True
             motivo = f"Resposta ICMP (Type {resp.getlayer(ICMP).type})"
 
-    if not up and not privado:
+    if not up and not ip_privado:
         if verbose: log("Tentando TCP SYN para porta 443...", "DEBUG", verbose)
         sport_rnd = random.randint(1025, 65535)
         resp = sr1(IP(dst=target_ip)/TCP(sport=sport_rnd, dport=443, flags="S"), timeout=timeout_val, verbose=0)
@@ -96,14 +93,14 @@ def verificar_ligado(target_ip, timeout_val, verbose=False):
         if resp and resp.haslayer(TCP):
             flags = resp.getlayer(TCP).flags
             if flags == 0x12:
-                up = True
+                is_up = True
                 motivo = "Porta 443 ABERTA (SYN-ACK)"
                 send(IP(dst=target_ip)/TCP(sport=sport_rnd, dport=443, flags="R"), verbose=0)
             elif flags == 0x14:
-                up = True 
+                is_up = True 
                 motivo = "Porta 443 FECHADA (RST)"
 
-    if not up and not privado:
+    if not up and not ip_privado:
         if verbose: log("Tentando TCP ACK para porta 80...", "DEBUG", verbose)
         sport_rnd = random.randint(1025, 65535)
         resp = sr1(IP(dst=target_ip)/TCP(sport=sport_rnd, dport=80, flags="A"), timeout=timeout_val, verbose=0)
@@ -111,13 +108,13 @@ def verificar_ligado(target_ip, timeout_val, verbose=False):
         if resp and resp.haslayer(TCP):
             flags = resp.getlayer(TCP).flags
             if flags & 0x04:
-                up = True
+                is_up = True
                 motivo = "Porta 80 respondeu RST (ACK Ping)"
 
     if up:
         log(f"Host {target_ip} está ONLINE. Motivo: {motivo}", "SUCCESS", verbose)
     else:
-        log(f"Host {target_ip} está OFFLINE.", "ERROR", verbose)
+        log(f"Host {target_ip} parece estar OFFLINE.", "ERROR", verbose)
     
     return up
 
@@ -316,7 +313,7 @@ def main():
         portas = validar_portas(args.ports)
     else:
         if args.verbose:
-            print("Escaneando as 1000 portas padrão...")
+            print("[*] Nenhuma porta definida. Escaneando as 1000 portas padrão...")
         portas = range(1, 1001)
 
     executar_scan(target_ip, portas, tipo_escolhido, args.fragment, args.verbose, args.timing)
