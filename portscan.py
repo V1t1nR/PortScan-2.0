@@ -21,8 +21,8 @@ TIMING_CONFIG = {
     0: {"threads": 1,   "timeout": 2.0, "sleep": 5.0, "desc": "Furtivo"},
     1: {"threads": 1,   "timeout": 1.5, "sleep": 2.0, "desc": "Discreto"},
     2: {"threads": 1,   "timeout": 1.0, "sleep": 0.4, "desc": "Suave"},
-    3: {"threads": 50,  "timeout": 1.0, "sleep": 0.0, "desc": "Normal"},
-    4: {"threads": 100, "timeout": 0.5, "sleep": 0.0, "desc": "Agressivo"},
+    3: {"threads": 50,  "timeout": 1.0, "sleep": 0.2, "desc": "Normal"},
+    4: {"threads": 100, "timeout": 0.5, "sleep": 0.1, "desc": "Agressivo"},
     5: {"threads": 200, "timeout": 0.2, "sleep": 0.0, "desc": "Extremo"}
 }
 
