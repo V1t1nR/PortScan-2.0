@@ -313,7 +313,7 @@ def main():
         portas = validar_portas(args.ports)
     else:
         if args.verbose:
-        portas = range(1, 1001)
+            portas = range(1, 1001)
 
     executar_scan(target_ip, portas, tipo_escolhido, args.fragment, args.verbose, args.timing)
 
