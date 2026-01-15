@@ -313,7 +313,6 @@ def main():
         portas = validar_portas(args.ports)
     else:
         if args.verbose:
-            print("[*] Nenhuma porta definida. Escaneando as 1000 portas padrão...")
         portas = range(1, 1001)
 
     executar_scan(target_ip, portas, tipo_escolhido, args.fragment, args.verbose, args.timing)
