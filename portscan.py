@@ -306,7 +306,7 @@ def main():
 
     timeout_discovery = TIMING_CONFIG[args.timing]["timeout"]
     if not verificar_ligado(target_ip, timeout_discovery, args.verbose):
-        print(f"O Host {target_ip} está OFFLINE ou bloqueando probes.")
+        print(f"O Host {target_ip} está OFFLINE.")
         sys.exit()
 
     if args.ports:
